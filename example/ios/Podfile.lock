@@ -1,0 +1,22 @@
+PODS:
+  - Flutter (1.0.0)
+  - quick_transfer_wifi_connector (0.0.1):
+    - Flutter
+
+DEPENDENCIES:
+  - Flutter (from `Flutter`)
+  - quick_transfer_wifi_connector (from `.symlinks/plugins/quick_transfer_wifi_connector/ios`)
+
+EXTERNAL SOURCES:
+  Flutter:
+    :path: Flutter
+  quick_transfer_wifi_connector:
+    :path: ".symlinks/plugins/quick_transfer_wifi_connector/ios"
+
+SPEC CHECKSUMS:
+  Flutter: f04841e97a9d0b0a8025694d0796dd46242b2854
+  quick_transfer_wifi_connector: 4b748fa702fd0f620d41ce9b1681fd0f1fc826aa
+
+PODFILE CHECKSUM: e82fbfd40f213e08e2a391e9205eb0e377519f0e
+
+COCOAPODS: 1.16.2
