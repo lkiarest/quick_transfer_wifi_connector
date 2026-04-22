@@ -14,6 +14,7 @@ access points, such as device file-transfer hotspots.
   s.license          = { :file => '../LICENSE' }
   s.author           = { 'qtx' => 'qtx@example.com' }
   s.source           = { :path => '.' }
+  s.static_framework = true
   s.requires_arc     = true
   s.source_files     = 'Classes/**/*'
   s.dependency 'Flutter'
@@ -29,6 +30,11 @@ access points, such as device file-transfer hotspots.
     'EXCLUDED_ARCHS[sdk=iphonesimulator*]' => 'i386',
     'IPHONEOS_DEPLOYMENT_TARGET' => '12.0',
     'SWIFT_VERSION' => '5.0'
+  }
+  s.user_target_xcconfig = {
+    'ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES' => 'YES',
+    'LIBRARY_SEARCH_PATHS' => '$(inherited) $(TOOLCHAIN_DIR)/usr/lib/swift/$(PLATFORM_NAME) /usr/lib/swift',
+    'LD_RUNPATH_SEARCH_PATHS' => '$(inherited) /usr/lib/swift'
   }
   s.swift_version = '5.0'
 end
