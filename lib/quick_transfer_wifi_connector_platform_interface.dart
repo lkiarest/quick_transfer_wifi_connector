@@ -4,7 +4,6 @@ import 'quick_transfer_wifi_connector.dart';
 import 'quick_transfer_wifi_connector_method_channel.dart';
 
 abstract class QuickTransferWifiConnectorPlatform extends PlatformInterface {
-  /// Constructs a QuickTransferWifiConnectorPlatform.
   QuickTransferWifiConnectorPlatform() : super(token: _token);
 
   static final Object _token = Object();
@@ -12,17 +11,19 @@ abstract class QuickTransferWifiConnectorPlatform extends PlatformInterface {
   static QuickTransferWifiConnectorPlatform _instance =
       MethodChannelQuickTransferWifiConnector();
 
-  /// The default instance of [QuickTransferWifiConnectorPlatform] to use.
-  ///
-  /// Defaults to [MethodChannelQuickTransferWifiConnector].
   static QuickTransferWifiConnectorPlatform get instance => _instance;
 
-  /// Platform-specific implementations should set this with their own
-  /// platform-specific class that extends [QuickTransferWifiConnectorPlatform] when
-  /// they register themselves.
   static set instance(QuickTransferWifiConnectorPlatform instance) {
     PlatformInterface.verifyToken(instance, _token);
     _instance = instance;
+  }
+
+  Future<void> prepareForDeviceWifiTransition({
+    required String deviceSsid,
+  }) {
+    throw UnimplementedError(
+      'prepareForDeviceWifiTransition() has not been implemented.',
+    );
   }
 
   Future<QuickTransferWifiJoinResult> joinWifiNetwork({
@@ -31,6 +32,13 @@ abstract class QuickTransferWifiConnectorPlatform extends PlatformInterface {
     required bool joinOnce,
   }) {
     throw UnimplementedError('joinWifiNetwork() has not been implemented.');
+  }
+
+  Future<QuickTransferWifiRestoreResult> restorePreviousNetwork({
+    required String deviceSsid,
+  }) {
+    throw UnimplementedError(
+        'restorePreviousNetwork() has not been implemented.');
   }
 
   Future<bool> openWifiSettings() {

@@ -4,12 +4,22 @@ import 'package:flutter/services.dart';
 import 'quick_transfer_wifi_connector.dart';
 import 'quick_transfer_wifi_connector_platform_interface.dart';
 
-/// An implementation of [QuickTransferWifiConnectorPlatform] that uses method channels.
 class MethodChannelQuickTransferWifiConnector
     extends QuickTransferWifiConnectorPlatform {
-  /// The method channel used to interact with the native platform.
   @visibleForTesting
   final methodChannel = const MethodChannel('quick_transfer_wifi_connector');
+
+  @override
+  Future<void> prepareForDeviceWifiTransition({
+    required String deviceSsid,
+  }) async {
+    await methodChannel.invokeMethod<void>(
+      'prepareForDeviceWifiTransition',
+      <String, dynamic>{
+        'deviceSsid': deviceSsid,
+      },
+    );
+  }
 
   @override
   Future<QuickTransferWifiJoinResult> joinWifiNetwork({
@@ -27,6 +37,26 @@ class MethodChannelQuickTransferWifiConnector
       },
     );
     return QuickTransferWifiJoinResult.fromMap(
+      result ??
+          <String, dynamic>{
+            'status': 'failed',
+            'message': 'Platform returned no result.',
+          },
+    );
+  }
+
+  @override
+  Future<QuickTransferWifiRestoreResult> restorePreviousNetwork({
+    required String deviceSsid,
+  }) async {
+    final Map<dynamic, dynamic>? result =
+        await methodChannel.invokeMapMethod<dynamic, dynamic>(
+      'restorePreviousNetwork',
+      <String, dynamic>{
+        'deviceSsid': deviceSsid,
+      },
+    );
+    return QuickTransferWifiRestoreResult.fromMap(
       result ??
           <String, dynamic>{
             'status': 'failed',

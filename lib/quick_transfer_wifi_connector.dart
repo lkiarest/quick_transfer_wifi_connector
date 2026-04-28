@@ -7,6 +7,13 @@ enum QuickTransferWifiJoinStatus {
   failed,
 }
 
+enum QuickTransferWifiRestoreStatus {
+  restored,
+  bestEffort,
+  unavailable,
+  failed,
+}
+
 class QuickTransferWifiJoinResult {
   const QuickTransferWifiJoinResult({
     required this.status,
@@ -43,8 +50,55 @@ class QuickTransferWifiJoinResult {
   }
 }
 
+class QuickTransferWifiRestoreResult {
+  const QuickTransferWifiRestoreResult({
+    required this.status,
+    required this.message,
+    required this.platform,
+  });
+
+  factory QuickTransferWifiRestoreResult.fromMap(Map<dynamic, dynamic> map) {
+    return QuickTransferWifiRestoreResult(
+      status: _statusFromString(map['status']?.toString()),
+      message: map['message']?.toString() ?? '',
+      platform: map['platform']?.toString() ?? '',
+    );
+  }
+
+  final QuickTransferWifiRestoreStatus status;
+  final String message;
+  final String platform;
+
+  bool get isRestored => status == QuickTransferWifiRestoreStatus.restored;
+
+  bool get isBestEffort => status == QuickTransferWifiRestoreStatus.bestEffort;
+
+  static QuickTransferWifiRestoreStatus _statusFromString(String? value) {
+    switch (value) {
+      case 'restored':
+        return QuickTransferWifiRestoreStatus.restored;
+      case 'best_effort':
+        return QuickTransferWifiRestoreStatus.bestEffort;
+      case 'unavailable':
+        return QuickTransferWifiRestoreStatus.unavailable;
+      case 'failed':
+      default:
+        return QuickTransferWifiRestoreStatus.failed;
+    }
+  }
+}
+
 class QuickTransferWifiConnector {
   const QuickTransferWifiConnector._();
+
+  static Future<void> prepareForDeviceWifiTransition({
+    required String deviceSsid,
+  }) {
+    return QuickTransferWifiConnectorPlatform.instance
+        .prepareForDeviceWifiTransition(
+      deviceSsid: deviceSsid.trim(),
+    );
+  }
 
   static Future<QuickTransferWifiJoinResult> joinWifiNetwork({
     required String ssid,
@@ -56,6 +110,14 @@ class QuickTransferWifiConnector {
       ssid: ssid.trim(),
       password: password,
       joinOnce: joinOnce,
+    );
+  }
+
+  static Future<QuickTransferWifiRestoreResult> restorePreviousNetwork({
+    required String deviceSsid,
+  }) {
+    return QuickTransferWifiConnectorPlatform.instance.restorePreviousNetwork(
+      deviceSsid: deviceSsid.trim(),
     );
   }
 
