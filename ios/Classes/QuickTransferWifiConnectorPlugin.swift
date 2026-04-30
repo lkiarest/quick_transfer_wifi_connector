@@ -59,9 +59,6 @@ public class QuickTransferWifiConnectorPlugin: NSObject, FlutterPlugin {
       return
     }
 
-    capturePreviousSSID(excluding: ssid)
-    deviceSSID = ssid
-
     if #available(iOS 11.0, *) {
       let configuration = NEHotspotConfiguration(ssid: ssid, passphrase: password, isWEP: false)
       configuration.joinOnce = joinOnce
