@@ -7,16 +7,24 @@
 
 @property(nonatomic, copy, nullable) NSString *previousSSID;
 @property(nonatomic, copy, nullable) NSString *deviceSSID;
+@property(nonatomic, copy, nullable) NSString *lastObservedSSID;
 
 - (void)prepareForDeviceWifiTransition:(FlutterMethodCall *)call result:(FlutterResult)result;
 - (void)joinWifiNetwork:(FlutterMethodCall *)call result:(FlutterResult)result;
 - (void)restorePreviousNetwork:(FlutterMethodCall *)call result:(FlutterResult)result;
 - (void)openWifiSettingsWithResult:(FlutterResult)result;
 - (void)capturePreviousSSIDExcluding:(NSString *)deviceSSID;
+- (void)fetchCurrentSSIDWithCompletion:(void (^)(NSString * _Nullable ssid))completion;
+- (void)waitForSSID:(NSString *)ssid
+           deadline:(NSDate *)deadline
+         completion:(void (^)(BOOL connected, NSString * _Nullable currentSSID))completion;
 
 @end
 
 @implementation QuickTransferWifiConnectorPlugin
+
+static const NSTimeInterval kWifiAssociationTimeoutSeconds = 30.0;
+static const NSTimeInterval kWifiAssociationPollIntervalSeconds = 0.75;
 
 + (void)registerWithRegistrar:(NSObject<FlutterPluginRegistrar> *)registrar {
     FlutterMethodChannel *channel = [FlutterMethodChannel methodChannelWithName:@"quick_transfer_wifi_connector"
@@ -87,42 +95,71 @@
     self.deviceSSID = ssid;
 
     if (@available(iOS 11.0, *)) {
-        NEHotspotConfiguration *configuration = [[NEHotspotConfiguration alloc] initWithSSID:ssid passphrase:password isWEP:NO];
-        configuration.joinOnce = joinOnce;
-        [[NEHotspotConfigurationManager sharedManager] applyConfiguration:configuration completionHandler:^(NSError *error) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                if (error) {
-                    NSInteger errorCode = error.code;
-                    if (errorCode == NEHotspotConfigurationErrorAlreadyAssociated) {
-                        result(@{
-                            @"status": @"connected",
-                            @"message": [NSString stringWithFormat:@"Already connected to %@.", ssid],
-                            @"platform": @"ios"
-                        });
-                        return;
-                    }
-                    if (errorCode == NEHotspotConfigurationErrorUserDenied) {
-                        result(@{
-                            @"status": @"userDenied",
-                            @"message": @"User denied Wi-Fi configuration.",
-                            @"platform": @"ios"
-                        });
-                        return;
-                    }
+        void (^finishAfterAssociation)(NSString *) = ^(NSString *prefix) {
+            NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:kWifiAssociationTimeoutSeconds];
+            [self waitForSSID:ssid deadline:deadline completion:^(BOOL connected, NSString * _Nullable currentSSID) {
+                if (connected) {
+                    NSString *message = currentSSID.length > 0
+                        ? [NSString stringWithFormat:@"%@ %@.", prefix, currentSSID]
+                        : [NSString stringWithFormat:@"%@ %@.", prefix, ssid];
                     result(@{
-                        @"status": @"failed",
-                        @"message": error.localizedDescription ?: @"",
+                        @"status": @"connected",
+                        @"message": message,
                         @"platform": @"ios"
                     });
                     return;
                 }
 
+                NSString *detail = currentSSID.length > 0
+                    ? [NSString stringWithFormat:@" current=%@", currentSSID]
+                    : @" current=<unknown>";
                 result(@{
-                    @"status": @"connected",
-                    @"message": [NSString stringWithFormat:@"Wi-Fi configuration applied for %@.", ssid],
+                    @"status": @"failed",
+                    @"message": [NSString stringWithFormat:@"Timed out waiting for iOS to associate with %@.%@", ssid, detail],
                     @"platform": @"ios"
                 });
-            });
+            }];
+        };
+
+        [self fetchCurrentSSIDWithCompletion:^(NSString * _Nullable currentSSID) {
+            if (currentSSID.length > 0 && [currentSSID isEqualToString:ssid]) {
+                result(@{
+                    @"status": @"connected",
+                    @"message": [NSString stringWithFormat:@"Already connected to %@.", ssid],
+                    @"platform": @"ios"
+                });
+                return;
+            }
+
+            NEHotspotConfiguration *configuration = [[NEHotspotConfiguration alloc] initWithSSID:ssid passphrase:password isWEP:NO];
+            configuration.joinOnce = joinOnce;
+            [[NEHotspotConfigurationManager sharedManager] applyConfiguration:configuration completionHandler:^(NSError *error) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    if (error) {
+                        NSInteger errorCode = error.code;
+                        if (errorCode == NEHotspotConfigurationErrorAlreadyAssociated) {
+                            finishAfterAssociation(@"Already associated with");
+                            return;
+                        }
+                        if (errorCode == NEHotspotConfigurationErrorUserDenied) {
+                            result(@{
+                                @"status": @"userDenied",
+                                @"message": @"User denied Wi-Fi configuration.",
+                                @"platform": @"ios"
+                            });
+                            return;
+                        }
+                        result(@{
+                            @"status": @"failed",
+                            @"message": error.localizedDescription ?: @"",
+                            @"platform": @"ios"
+                        });
+                        return;
+                    }
+
+                    finishAfterAssociation(@"Connected to");
+                });
+            }];
         }];
         return;
     }
@@ -180,20 +217,61 @@
 }
 
 - (void)capturePreviousSSIDExcluding:(NSString *)deviceSSID {
+    [self fetchCurrentSSIDWithCompletion:^(NSString * _Nullable ssid) {
+        if (ssid.length == 0 || [ssid isEqualToString:deviceSSID]) {
+            return;
+        }
+
+        self.previousSSID = ssid;
+    }];
+}
+
+- (void)fetchCurrentSSIDWithCompletion:(void (^)(NSString * _Nullable ssid))completion {
     if (@available(iOS 14.0, *)) {
         [NEHotspotNetwork fetchCurrentWithCompletionHandler:^(NEHotspotNetwork * _Nullable currentNetwork) {
-            if (!currentNetwork) {
-                return;
-            }
-
             NSString *ssid = [currentNetwork.SSID stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-            if (ssid.length == 0 || [ssid isEqualToString:deviceSSID]) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (ssid.length > 0) {
+                    self.lastObservedSSID = ssid;
+                }
+                completion(ssid.length > 0 ? ssid : nil);
+            });
+        }];
+        return;
+    }
+
+    dispatch_async(dispatch_get_main_queue(), ^{
+        completion(nil);
+    });
+}
+
+- (void)waitForSSID:(NSString *)ssid
+           deadline:(NSDate *)deadline
+         completion:(void (^)(BOOL connected, NSString * _Nullable currentSSID))completion {
+    if (@available(iOS 14.0, *)) {
+        [self fetchCurrentSSIDWithCompletion:^(NSString * _Nullable currentSSID) {
+            if (currentSSID.length > 0 && [currentSSID isEqualToString:ssid]) {
+                completion(YES, currentSSID);
                 return;
             }
 
-            self.previousSSID = ssid;
+            if ([[NSDate date] compare:deadline] != NSOrderedAscending) {
+                completion(NO, currentSSID != nil ? currentSSID : self.lastObservedSSID);
+                return;
+            }
+
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(kWifiAssociationPollIntervalSeconds * NSEC_PER_SEC)),
+                           dispatch_get_main_queue(), ^{
+                [self waitForSSID:ssid deadline:deadline completion:completion];
+            });
         }];
+        return;
     }
+
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.0 * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
+        completion(YES, nil);
+    });
 }
 
 @end
